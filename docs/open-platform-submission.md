@@ -16,8 +16,8 @@
 
 | 文件 | 说明 |
 |---|---|
-| `dist/workbuddy-thread-context-1.0.0.zip` | **首选**。包内以技能名为根目录：`workbuddy-thread-context/{SKILL.md, references/, scripts/}` |
-| `dist/workbuddy-thread-context-1.0.0-flat.zip` | 备选。根目录直接放 `SKILL.md`。**仅当首选包解析失败（提示缺少 SKILL.md 或目录层级不对）时换用** |
+| `dist/workbuddy-thread-context-1.0.1.zip` | **首选**。包内以技能名为根目录：`workbuddy-thread-context/{SKILL.md, references/, scripts/}` |
+| `dist/workbuddy-thread-context-1.0.1-flat.zip` | 备选。根目录直接放 `SKILL.md`。**仅当首选包解析失败（提示缺少 SKILL.md 或目录层级不对）时换用** |
 
 - 大小 ~11KB，限制 3MB，远低于上限。
 - 重新生成：`python tools/build-skill-zip.py`
@@ -31,7 +31,7 @@
 | 市场展示分类 | `效率工具`、`办公协同`（可选加 `知识与学习`；至少 1 个，最多 5 个） |
 | 服务类目 | `工具-办公` |
 | 头像 | 上传 `assets/icon-512.png`（512×512 PNG，15KB；要求 512×512、JPG/PNG、≤500KB） |
-| 版本号 | `1.0.0` |
+| 版本号 | `1.0.1` |
 
 **介绍文案**（对应平台「介绍」字段，可直接粘贴）：
 
@@ -47,7 +47,7 @@ description: 在会话之间搬运上下文。当用户贴会话 ID 问……时
 description_zh: 把另一个会话的上下文搬进当前会话，支持按消息锚点「分叉」……
 description_en: Bring another WorkBuddy thread context into the current conversation...
 category: productivity
-version: 1.0.0
+version: 1.0.1
 author: Strange
 allowed-tools: Bash,Read
 ```

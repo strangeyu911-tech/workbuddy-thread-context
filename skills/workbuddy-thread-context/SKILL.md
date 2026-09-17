@@ -6,7 +6,7 @@ description: 在会话之间搬运上下文。当用户贴会话 ID 问「你能
 description_zh: 把另一个会话的上下文搬进当前会话，支持按消息锚点「分叉」——只带某条消息之前的历史，之后的不带，对标 Codex 桌面版的 Fork。
 description_en: Bring another WorkBuddy thread context into the current session, and fork it at any message anchor - keep the history up to that message and drop the rest.
 category: productivity
-version: 1.0.0
+version: 1.0.1
 author: Strange
 allowed-tools: Bash,Read
 ---
@@ -72,7 +72,7 @@ node "$S" --id <id> --points --max 60
 ```
 
 输出形如 `#  7 | 09-17 07:34 | assistant | 这张图最关键的信息是……（56 字）`。
-锚点只计 user / assistant 消息；工具与 harness 注入块已被剥掉，user 消息只取 `<user_query>` 里的真话。
+锚点只计 user / assistant 消息；工具与 harness 注入块已被剥掉，user 消息**先抽 `<user_query>` 里的真话**、再按前缀判注入块（两者可能落在同一条记录里，先判前缀会把真话一起丢掉）。
 
 ### 3）分叉导出交接稿
 
@@ -119,3 +119,8 @@ node "$S" --id <id> --export                             # 不带范围 = 整条
 
 - 只读**本机文件**；不联网、不调用任何接口、不上传任何内容、不写业务数据。
 - 导出的交接稿可能含敏感正文，默认落在本机 `~/.workbuddy/branches/`，请自行保管，别提交进公开仓库。
+
+## 版本
+
+- **1.0.1** —— user 消息先抽 `<user_query>` 再判注入块：两者可能落在同一条记录里，原来的顺序会把这类消息整条丢掉，锚点清单因此少一截。
+- **1.0.0** —— 首版。按会话 ID 读取、关键词反查、锚点分叉导出；数据目录自动探测 `.workbuddy` / `.workbuddy-ai`，可用 `--home` 或 `WB_HOME` 指定。

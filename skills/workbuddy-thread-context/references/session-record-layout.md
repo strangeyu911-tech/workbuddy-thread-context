@@ -50,5 +50,5 @@
 - **坏行要跳过**：会话进行中追加写，最后一行可能被读成半截 JSON。逐行 `try/catch`。
 - **不要用 `content` 找工具参数**：参数不在 `content` 里，只在 `arguments`。
 - **不要用 `timestamp` 直接当秒**：它是毫秒；跨端对时间戳做比较前先确认单位。
-- **注入块要剥**：`user` 记录里可能夹着 harness 注入的说明块。真话通常包在 `<user_query>…</user_query>` 里；以 `<system-reminder>` / `<cb_summary>` / `<additional_data>` / `<identity_context>` 开头的整条丢弃。
+- **注入块要剥**：`user` 记录里可能夹着 harness 注入的说明块。**先抽 `<user_query>…</user_query>`**，抽不到再按开头标记（`<system-reminder>` / `<cb_summary>` / `<additional_data>` / `<identity_context>`）整条丢弃 —— 顺序反了会把「注入块与真话同行」的那些消息一起丢掉。
 - **文件是追加的**：同一会话几分钟内条数会变。要做一致性判断就先记下 mtime 与行数。

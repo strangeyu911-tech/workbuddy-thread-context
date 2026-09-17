@@ -120,9 +120,11 @@ function proseOf(rec) {
 // 锚点/交接稿用的「正文」：user 消息抽 <user_query> 里的真话，剥掉工具注入块
 function bodyOf(rec) {
   const raw = proseOf(rec);
-  if (/^\s*<(cb_summary|system-reminder|additional_data|identity_context)/.test(raw)) return '';
+  // 先抽 <user_query> 再判注入块：注入块与用户真话可能落在同一条记录里，
+  // 先判前缀会把真话一起丢掉。
   const m = raw.match(/<user_query>([\s\S]*?)<\/user_query>/);
   if (m) return m[1].trim();
+  if (/^\s*<(cb_summary|system-reminder|additional_data|identity_context)/.test(raw)) return '';
   return raw;
 }
 
