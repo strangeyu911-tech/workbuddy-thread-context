@@ -8,7 +8,6 @@ description_en: Bring another WorkBuddy thread context into the current session,
 category: productivity
 version: 1.1.0
 author: Strange
-allowed-tools: Bash,Read
 ---
 
 # 会话分支（跨线程上下文）
@@ -117,6 +116,8 @@ node "$P" --id <id> --out "<临时目录>/picker.html" --only user,notice
 
 面板内容：三种模式（保留到此 / 只要之后 / 取区间）、按内容过滤、只看我发的、换会话（同级最近 5 个）、显示全部锚点。默认「保留到此」= 只带该点之前的历史，与 Codex Fork 语义一致。
 
+**工具需求**：这条路要能跑 Bash（执行脚本）、Read（把生成的 HTML 读回来）、以及宿主的**可视化渲染工具**（把 HTML 渲染成面板）。故意不写 `allowed-tools` 白名单——渲染工具的名字不在官方文档的工具清单里，一旦白名单把它挡掉，这条路会静默失效。
+
 **为什么必须内联整段 HTML**：widget 读不到外部文件，HTML 只能整段传给渲染工具 —— 所以每次渲染约 9KB，这是本方案唯一的成本。用 `--only user,notice` 收窄体积（默认面板 ~16 个锚点 → 9KB；不加则 ~117 个 → 15KB）。助手回复锚点交给「显示全部 ↗」触发重渲染时再装。
 
 **离线也能用**：这份 HTML 直接用浏览器打开也行。此时没有 `sendPrompt`，面板会把该跑的指令显示出来让人手动复制 —— 所以拿着它在哪里都能分叉。
@@ -163,5 +164,6 @@ node "$P" --id <id> --out "<临时目录>/picker.html" --only user,notice
   - **摘要类记录整条丢弃**：`<cb_summary>` / `<conversation_history_summary>` 内部引用了 `<user_query>` 字样，会让正则横跨整个摘要乱匹配，产出垃圾锚点（实测一次 3 条）
   - user 消息取**最后一组** `<user_query>`（宿主把真话追加在记录末尾；取第一组时若前面有同名空标签会整条丢，实测丢过 7 条真话）
   - 剥掉 `@selection:"…"` 与 `<selection_quote>` 包装（引文正文保留）
+  - **去掉 frontmatter 的 `allowed-tools` 白名单**：面板那一步要用宿主的可视化渲染工具，而它的名字不在官方文档的工具清单里 —— 白名单一旦把它挡掉会静默失效。改为在正文写明需要 Bash / Read / 渲染工具。
 - **1.0.1** —— user 消息先抽 `<user_query>` 再判注入块：两者可能落在同一条记录里，原来的顺序会把这类消息整条丢掉，锚点清单因此少一截。
 - **1.0.0** —— 首版。按会话 ID 读取、关键词反查、锚点分叉导出；数据目录自动探测 `.workbuddy` / `.workbuddy-ai`，可用 `--home` 或 `WB_HOME` 指定。

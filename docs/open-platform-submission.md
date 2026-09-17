@@ -49,8 +49,9 @@ description_en: Bring another WorkBuddy thread context into the current conversa
 category: productivity
 version: 1.1.0
 author: Strange
-allowed-tools: Bash,Read
 ```
+
+> **为什么不写 `allowed-tools`**：该字段是可选的白名单，但官方文档没给合法工具名清单。本技能的面板那一步要用宿主的可视化渲染工具，白名单一旦把它的名字挡掉会静默失效 —— 因此省略该字段（官方示例与多数已上架技能同样省略），改为在正文里写明需要 Bash / Read / 渲染工具。
 
 ## 四、提交步骤
 
