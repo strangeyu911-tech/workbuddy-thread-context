@@ -13,6 +13,9 @@ node skills/workbuddy-thread-context/scripts/thread.mjs --id 93530613 --points
 
 # 从 #7 分叉：只带 #1–#7，之后的全部忘掉
 node skills/workbuddy-thread-context/scripts/thread.mjs --id 93530613 --until 7 --export
+
+# 在对话里点着分叉：把分叉点渲染成可点面板，不用记编号
+node skills/workbuddy-thread-context/scripts/picker.mjs --id 93530613 --out picker.html --only user,notice
 ```
 
 ## 为什么需要它
@@ -32,7 +35,24 @@ node skills/workbuddy-thread-context/scripts/thread.mjs --id 93530613 --until 7 
 ~/.workbuddy/projects/<工作区slug>/<会话id>.jsonl   # 每行一条记录
 ```
 
-脚本把这行文件解析成「锚点」（user / assistant 消息，按顺序编号），再按你选的范围切片、渲染成 Markdown 交接稿。
+脚本把这行文件解析成「锚点」（`user` / `assistant` / `notice` 三类消息，按顺序编号），再按你选的范围切片、渲染成 Markdown 交接稿。
+
+`notice` 是宿主投递的后台任务通知、hook 回执一类——它们也裹在 `role: user` 的记录里，但不是人说的话，所以单独归类。
+
+## 在对话里点着分叉（分叉选择器）
+
+记编号太麻烦。`picker.mjs` 把锚点清单渲染成一块**可点面板**：选一条消息、按一下按钮，分叉就开始了。
+
+```bash
+node skills/workbuddy-thread-context/scripts/picker.mjs --id 93530613 --out picker.html --only user,notice
+```
+
+- 三种模式：**保留到此**（只带该点之前的历史，等同 Codex Fork）、**只要之后**、**取区间**。另有内容过滤、只看我发的、换会话、显示全部锚点。
+- 在 WorkBuddy 会话内渲染时，面板的按钮会把一句**确定的指令**回传给模型（形如 `分叉会话 93530613： --until 7 --export`），模型据此导出交接稿——等于给「新建分支」装了个按钮。
+- 这份 HTML 也**可以直接用浏览器打开**。此时按钮不回传指令，而是把该跑的命令显示出来供你手动执行。
+- `--only user,notice` 只把「人说的」和「系统通知」装进面板，体积约为全量的六成；助手回复锚点由面板上的「显示全部 ↗」触发重渲染时再装。
+
+面板不读任何外部资源（CSS/JS/数据全部内联），离线可用。
 
 ## 安装
 
@@ -70,6 +90,8 @@ node skills/workbuddy-thread-context/scripts/thread.mjs --help
 | 只记得内容，忘了是哪个会话 | `--search "关键词" --days 3` |
 | 看某个会话的最后几轮 | `--id <id> --tail 20` |
 | 列出可用的分叉点 | `--id <id> --points` |
+| 在对话里点着分叉（渲染面板） | `picker.mjs --id <id> --out picker.html` |
+| 拿机器可读的锚点清单 | `--id <id> --points --json --slim` |
 | 从第 7 条消息分叉 | `--id <id> --until 7 --export` |
 | 只要中间一段 | `--id <id> --from 10 --to 11 --export` |
 | 按时间点分叉 | `--id <id> --until "09-17 15:30" --export` |
@@ -82,6 +104,7 @@ node skills/workbuddy-thread-context/scripts/thread.mjs --help
 | Codex | 本技能 |
 |---|---|
 | Fork（从某条消息起新会话，之后的不保留） | `--until <锚点> --export`，然后把它读进当前会话 |
+| **消息旁的分叉图标** | **分叉选择器面板里点那一行**（`picker.mjs`） |
 | 「在新工作树中创建分支」（代码也分叉） | 只 fork 上下文；代码回滚自己 `git reset --hard`——两件事分开 |
 | `/side`（继承上下文的临时岔路） | `--tail 8` 就地看尾部讨论 |
 | `@历史会话`（自动总结交接） | 不带范围的 `--export`，或读进来后自行压缩 |

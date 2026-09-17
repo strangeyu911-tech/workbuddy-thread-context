@@ -6,7 +6,7 @@ description: 在会话之间搬运上下文。当用户贴会话 ID 问「你能
 description_zh: 把另一个会话的上下文搬进当前会话，支持按消息锚点「分叉」——只带某条消息之前的历史，之后的不带，对标 Codex 桌面版的 Fork。
 description_en: Bring another WorkBuddy thread context into the current session, and fork it at any message anchor - keep the history up to that message and drop the rest.
 category: productivity
-version: 1.0.1
+version: 1.1.0
 author: Strange
 allowed-tools: Bash,Read
 ---
@@ -71,15 +71,25 @@ node "$S" --id <id> --tail 20                     # 有 ID：先看它最后在�
 node "$S" --id <id> --points --max 60
 ```
 
-输出形如 `#  7 | 09-17 07:34 | assistant | 这张图最关键的信息是……（56 字）`。
-锚点只计 user / assistant 消息；工具与 harness 注入块已被剥掉，user 消息**先抽 `<user_query>` 里的真话**、再按前缀判注入块（两者可能落在同一条记录里，先判前缀会把真话一起丢掉）。
+输出形如 `#  7 | 09-17 16:34 | assistant | 这张图最关键的信息是……（56 字）`。
+锚点三类：`user`（人说的）、`assistant`、`notice`（宿主投递的后台任务通知/hook 回执，**不是人说的**）。
+时间一律是**本地时间**（不是 UTC）。工具调用与 harness 注入块已剥掉：user 消息先抽 `<user_query>` 里的真话（取**最后一组**）、再按前缀判注入块，最后剥掉 `@selection:"…"` / `<selection_quote>` 包装。
+**摘要类记录（`<cb_summary>` / `<conversation_history_summary>`）整条丢弃**——它们内部引用了 `<user_query>` 字样，不丢会让正则横跨整个摘要乱匹配。
+
+想拿机器可读的锚点（给界面用）：
+
+```bash
+node "$S" --id <id> --points --json --slim --max 300 --text 46
+# → {"s":{会话},"r":[同级会话],"a":[[n,"MM-DD HH:MM",角色码,字数,摘要]],"t":截断数}
+#    角色码 0=user 1=assistant 2=notice；--slim 比对象形式小 ~45%
+```
 
 ### 3）分叉导出交接稿
 
 ```bash
 node "$S" --id <id> --until 7 --export                  # 只带 #1–#7（忘掉后半段无效对话）
 node "$S" --id <id> --from 10 --to 11 --export           # 只要中间这一段
-node "$S" --id <id> --until "09-17 15:30" --export       # 也可按时间点分叉
+node "$S" --id <id> --until "09-17 15:30" --export       # 也可按本地时间点分叉
 node "$S" --id <id> --export                             # 不带范围 = 整条会话摘要式交接
 ```
 
@@ -88,11 +98,35 @@ node "$S" --id <id> --export                             # 不带范围 = 整条
 - `--no-noise` 去掉工具折叠块，`--exportWidth N` 调每条截断长度（默认 1200 字，超出保留头尾）。
 - 写完用 Read 读进当前会话 = 从该点继续。**原会话不受影响**（与 Codex Fork 语义一致：只 fork 会话，不动源）。
 
+## 分叉选择器：把「选分叉点」变成能点的界面（推荐入口）
+
+别每次都让用户看编号报数字。跑一次生成器，把锚点清单渲染成**对话内的可点面板**：
+
+```bash
+P="<本技能目录>/scripts/picker.mjs"
+node "$P" --id <id> --out "<临时目录>/picker.html" --only user,notice
+```
+
+然后按三步走：
+
+1. **Read 那个 HTML**，把内容**原样**作为 `widget_code` 传给可视化渲染工具，标题用「会话分叉选择器」。不要改里面的 CSS/JS——它是自包含的。
+2. 用户在面板上点一条消息、按「导出分支交接稿」，面板会回传一句**确定的指令**，形如
+   `分叉会话 318118d1： --until 13 --export（保留 #1 → #13）`
+   面板的「换会话」按钮回传的是 `渲染会话 <id8> 的分叉选择器`；「显示全部 ↗」回传的是重渲染且带助手锚点。
+3. 收到这类指令**照字面执行**第 3 节的 CLI，再把交接稿路径 + 「新会话里怎么续上」一并回给用户。
+
+面板内容：三种模式（保留到此 / 只要之后 / 取区间）、按内容过滤、只看我发的、换会话（同级最近 5 个）、显示全部锚点。默认「保留到此」= 只带该点之前的历史，与 Codex Fork 语义一致。
+
+**为什么必须内联整段 HTML**：widget 读不到外部文件，HTML 只能整段传给渲染工具 —— 所以每次渲染约 9KB，这是本方案唯一的成本。用 `--only user,notice` 收窄体积（默认面板 ~16 个锚点 → 9KB；不加则 ~117 个 → 15KB）。助手回复锚点交给「显示全部 ↗」触发重渲染时再装。
+
+**离线也能用**：这份 HTML 直接用浏览器打开也行。此时没有 `sendPrompt`，面板会把该跑的指令显示出来让人手动复制 —— 所以拿着它在哪里都能分叉。
+
 ## 与 Codex 桌面版的功能对照
 
 | Codex | 本方案 |
 |---|---|
-| Fork（从某条消息起新会话，之后的不保留） | `--until <锚点> --export` → 读交接稿 |
+| Fork（从某条消息起新会话，之后的不保留） | `--until <锚点> --export` → 读交接稿；界面版见「分叉选择器」 |
+| 消息旁的分叉图标 | 面板里点那一行（`picker.mjs` 渲染） |
 | 「在此工作空间中创建分支」/「新工作树中创建分支」 | 只 fork 上下文；代码回滚自己 `git reset --hard`（两件事分开） |
 | `/side`（继承上下文的临时岔路） | `--tail 8` 只看尾部就地讨论，不导文件 |
 | `@历史会话`（自动总结交接） | `--export`（不带范围）或让模型读交接稿后自行压缩 |
@@ -100,7 +134,7 @@ node "$S" --id <id> --export                             # 不带范围 = 整条
 ## 操作顺序（推荐）
 
 1. 有 ID → `--id`；没 ID → `--search` 关键词定位会话与时间点。
-2. `--points` 打锚点清单 → **问用户「从哪条分叉」**（或用户已指定就跳过）。
+2. **优先渲染分叉选择器**（上一节），让用户点；用户明确给了编号或时间就直接跳到 3。
 3. `--until` / `--from` / `--to` + `--export` → Read 交接稿 → 在新会话里继续。
 4. 回话时明说来源（「靠本机落盘切片，不是平台检索」），并区分「本次只带了 #1–#7」这种边界。
 
@@ -122,5 +156,12 @@ node "$S" --id <id> --export                             # 不带范围 = 整条
 
 ## 版本
 
+- **1.1.0** —— 加了**分叉选择器**（`scripts/picker.mjs`）：把锚点清单渲染成对话内可点面板，点一下即分叉，不用再手敲编号。配套改动：
+  - `--points --json [--slim]` 机器可读输出（`--slim` 数组化，体积小 ~45%）
+  - 锚点分三类：`user` / `assistant` / **`notice`**（后台任务通知、hook 回执 —— 之前被当成「我发的」）
+  - **时间全部改成本地时间**。原来用 `toISOString()` 输出 UTC，显示时刻与墙上钟差 8 小时、按 `--until "MM-DD HH:MM"` 分叉会选错点
+  - **摘要类记录整条丢弃**：`<cb_summary>` / `<conversation_history_summary>` 内部引用了 `<user_query>` 字样，会让正则横跨整个摘要乱匹配，产出垃圾锚点（实测一次 3 条）
+  - user 消息取**最后一组** `<user_query>`（宿主把真话追加在记录末尾；取第一组时若前面有同名空标签会整条丢，实测丢过 7 条真话）
+  - 剥掉 `@selection:"…"` 与 `<selection_quote>` 包装（引文正文保留）
 - **1.0.1** —— user 消息先抽 `<user_query>` 再判注入块：两者可能落在同一条记录里，原来的顺序会把这类消息整条丢掉，锚点清单因此少一截。
 - **1.0.0** —— 首版。按会话 ID 读取、关键词反查、锚点分叉导出；数据目录自动探测 `.workbuddy` / `.workbuddy-ai`，可用 `--home` 或 `WB_HOME` 指定。

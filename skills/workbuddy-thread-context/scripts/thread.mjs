@@ -44,7 +44,8 @@ const EXPORT_WIDTH = Number(args.exportWidth ?? 1200);
 const USAGE = [
   'node thread.mjs --list [--days 3]',
   'node thread.mjs --search "关键词" [--days 3] [--limit 5]',
-  'node thread.mjs --id <id> --points [--max 60]',
+  'node thread.mjs --id <id> --points [--max 60] [--minChars 40]',
+  'node thread.mjs --id <id> --points --json [--text 90] [--recent 6]   # 给分叉选择器用',
   'node thread.mjs --id <id> --until <锚点|MM-DD HH:MM> --export [--out 路径]',
   'node thread.mjs --id <id> --from <锚点> --to <锚点> --export',
   'node thread.mjs --id <id> --tail 20 [--grep 关键词] [--width 1500]',
@@ -117,14 +118,36 @@ function proseOf(rec) {
   return text.trim();
 }
 
+// 摘要类记录：harness 把「对话摘要」塞进了一条 role=user 的记录里。
+// 它内部引用了 <user_query> 字样，会让下面的正则横跨整个摘要乱匹配，
+// 必须整条丢掉（它永远不是用户真话）。
+const SUMMARY_PREFIX = /^\s*<(cb_summary|conversation_history_summary)/;
+// 其余 harness 注入块（不是用户说的话）
+const INJECT_PREFIX = /^\s*<(cb_summary|conversation_history_summary|system-reminder|additional_data|identity_context|user_info)/;
+// harness 以 role=user 投递、但并非人说的消息
+const NOTICE_PREFIX = /^\s*<(task-notification|user-prompt-submit-hook|system-warning)\b/;
+
+// 划词引用会往用户消息里塞 @selection:"…" 与 <selection_quote> 包裹。
+// 引文本身要留（那是用户想看的东西），只剥掉包装与元数据属性。
+const stripSelection = (t) => t
+  .replace(/@selection:\s*"[^"]*"/g, '')
+  .replace(/<\/?selection_quote\b[^>]*>/g, '')
+  .replace(/[ \t]{2,}/g, ' ')
+  .trim();
+
 // 锚点/交接稿用的「正文」：user 消息抽 <user_query> 里的真话，剥掉工具注入块
 function bodyOf(rec) {
   const raw = proseOf(rec);
-  // 先抽 <user_query> 再判注入块：注入块与用户真话可能落在同一条记录里，
-  // 先判前缀会把真话一起丢掉。
-  const m = raw.match(/<user_query>([\s\S]*?)<\/user_query>/);
-  if (m) return m[1].trim();
-  if (/^\s*<(cb_summary|system-reminder|additional_data|identity_context)/.test(raw)) return '';
+  if (!raw) return '';
+  if (SUMMARY_PREFIX.test(raw)) return '';
+  // 真实用户消息长这样：<system-reminder data-role="user-context">…<user_query>真话</user_query>
+  // 所以「先抽 query 再判前缀」——先判前缀会把真话一起丢掉。
+  // 取**最后一组**（宿主把用户真话追加在记录的末尾；前面的上下文可能带同名字样）。
+  if (rec.role === 'user') {
+    const all = [...raw.matchAll(/<user_query>([\s\S]*?)<\/user_query>/g)];
+    if (all.length) return stripSelection(all[all.length - 1][1]);
+  }
+  if (INJECT_PREFIX.test(raw)) return '';
   return raw;
 }
 
@@ -137,7 +160,19 @@ function readRecords(file) {
   return recs;
 }
 
-const clock = (t) => (t ? new Date(t).toISOString().slice(5, 16).replace('T', ' ') : '--:--');
+// 本地时间（不是 UTC）。之前用 toISOString 会让显示时刻与墙上钟差 8 小时，
+// 按 "MM-DD HH:MM" 分叉时会选错点。
+const pad2 = (n) => String(n).padStart(2, '0');
+const clock = (t) => {
+  if (!t) return '--:--';
+  const d = new Date(t);
+  return `${pad2(d.getMonth() + 1)}-${pad2(d.getDate())} ${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
+};
+// 带年份的本地时间戳（交接稿的「生成时间」用）
+const stamp = (t) => {
+  const d = new Date(t);
+  return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())} ${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
+};
 const oneLine = (s) => s.replace(/\s+/g, ' ').trim();
 
 function buildAnchors(recs) {
@@ -146,7 +181,12 @@ function buildAnchors(recs) {
     if (r.type !== 'message' || !r.role) return;
     const t = bodyOf(r);
     if (!t) return;
-    anchors.push({ n: anchors.length + 1, recIndex: i, time: r.timestamp, role: r.role, text: t, chars: t.length });
+    // 宿主会把「后台任务完成通知」「hook 回执」也裹成 role=user 的记录，
+    // 那不是人说的话，单独归为 notice，界面上才不会被当成"我发的"。
+    const kind = r.role === 'assistant'
+      ? 'assistant'
+      : (NOTICE_PREFIX.test(t) ? 'notice' : 'user');
+    anchors.push({ n: anchors.length + 1, recIndex: i, time: r.timestamp, role: r.role, kind, text: t, chars: t.length });
   });
   return anchors;
 }
@@ -227,10 +267,64 @@ if (args.points) {
   const max = Number(args.max ?? 60);
   const min = Number(args.minChars ?? 0);
   const list = anchors.filter((a) => a.chars >= min);
+
+  // 机器可读输出：给「分叉选择器」这类界面消费（一次调用拿齐会话 + 锚点 + 同级会话列表）
+  if (args.json) {
+    const textLen = Number(args.text ?? 90);
+    const sameSlug = walkSessions(3650)
+      .filter((s) => s.slug === target.slug && s.path !== target.path)
+      .sort((a, b) => b.mtime - a.mtime)
+      .slice(0, Number(args.recent ?? 6))
+      .map((s) => ({
+        id: s.name.replace(/\.jsonl$/, ''),
+        id8: s.name.replace(/\.jsonl$/, '').slice(0, 8),
+        clock: clock(s.mtime),
+        kb: Math.round(s.size / 1024),
+      }));
+
+    // --slim：数组化 + 角色编码（0=user 1=assistant），体积约为对象形式的 55%
+    if (args.slim) {
+      console.log(JSON.stringify({
+        s: {
+          id8: target.name.replace(/\.jsonl$/, '').slice(0, 8),
+          slug: target.slug,
+          recs: recs.length,
+          n: anchors.length,
+          up: clock(target.mtime),
+        },
+        r: sameSlug.map((s) => [s.id8, s.clock, s.kb]),
+        a: list.slice(0, max).map((a) => [a.n, clock(a.time), a.kind === 'user' ? 0 : a.kind === 'assistant' ? 1 : 2, a.chars, oneLine(a.text).slice(0, textLen)]),
+        t: Math.max(0, list.length - max),
+      }));
+      process.exit(0);
+    }
+
+    console.log(JSON.stringify({
+      session: {
+        id: target.name.replace(/\.jsonl$/, ''),
+        id8: target.name.replace(/\.jsonl$/, '').slice(0, 8),
+        slug: target.slug,
+        records: recs.length,
+        anchors: anchors.length,
+        updated: clock(target.mtime),
+      },
+      recent: sameSlug,
+      anchors: list.slice(0, max).map((a) => ({
+        n: a.n,
+        c: clock(a.time),
+        role: a.kind,
+        chars: a.chars,
+        text: oneLine(a.text).slice(0, textLen),
+      })),
+      truncated: Math.max(0, list.length - max),
+    }));
+    process.exit(0);
+  }
+
   console.log(`# ${target.slug}/${target.name} | ${recs.length} 条记录 | ${anchors.length} 个锚点 | 更新 ${clock(target.mtime)}`);
-  console.log('# 锚点 = user / assistant 消息。用 --until <n> 或 --from <n> --to <m> 分叉。\n');
+  console.log('# 锚点 = user / assistant / notice（系统通知）消息。用 --until <n> 或 --from <n> --to <m> 分叉。\n');
   for (const a of list.slice(0, max)) {
-    console.log(`#${String(a.n).padStart(3)} | ${clock(a.time)} | ${a.role.padEnd(9)} | ${oneLine(a.text).slice(0, 70)}（${a.chars} 字）`);
+    console.log(`#${String(a.n).padStart(3)} | ${clock(a.time)} | ${a.kind.padEnd(9)} | ${oneLine(a.text).slice(0, 70)}（${a.chars} 字）`);
   }
   if (list.length > max) console.log(`…（还有 ${list.length - max} 个锚点，用 --max 调大）`);
   process.exit(0);
@@ -255,7 +349,7 @@ if (args.export || args.until || args.from) {
     `- 来源会话：\`${target.path}\``,
     `- 分支范围：**#${start.n}（${clock(start.time)}） → #${end.n}（${clock(end.time)}）**，共 ${slice.length} 条消息`,
     '- 分叉语义：只带这段历史，**该点之后的对话不纳入**；原会话不受影响',
-    `- 生成时间：${new Date().toISOString().replace('T', ' ').slice(0, 16)}（本机落盘记录，非平台检索）`,
+    `- 生成时间：${stamp(Date.now())}（本机落盘记录，非平台检索）`,
     '',
     '---',
     '',
@@ -263,7 +357,7 @@ if (args.export || args.until || args.from) {
 
   const body = slice.map((a) => {
     const rec = recs[a.recIndex];
-    const lines = [`## #${a.n} · ${clock(a.time)} · ${a.role}`, '', clip(bodyOf(rec), EXPORT_WIDTH), ''];
+    const lines = [`## #${a.n} · ${clock(a.time)} · ${a.kind}`, '', clip(bodyOf(rec), EXPORT_WIDTH), ''];
     if (includeNoise) {
       const noise = [];
       for (let i = a.recIndex + 1; i < recs.length; i++) {

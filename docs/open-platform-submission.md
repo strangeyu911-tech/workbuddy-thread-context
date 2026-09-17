@@ -16,8 +16,8 @@
 
 | 文件 | 说明 |
 |---|---|
-| `dist/workbuddy-thread-context-1.0.1.zip` | **首选**。包内以技能名为根目录：`workbuddy-thread-context/{SKILL.md, references/, scripts/}` |
-| `dist/workbuddy-thread-context-1.0.1-flat.zip` | 备选。根目录直接放 `SKILL.md`。**仅当首选包解析失败（提示缺少 SKILL.md 或目录层级不对）时换用** |
+| `dist/workbuddy-thread-context-1.1.0.zip` | **首选**。包内以技能名为根目录：`workbuddy-thread-context/{SKILL.md, references/, scripts/}` |
+| `dist/workbuddy-thread-context-1.1.0-flat.zip` | 备选。根目录直接放 `SKILL.md`。**仅当首选包解析失败（提示缺少 SKILL.md 或目录层级不对）时换用** |
 
 - 大小 ~11KB，限制 3MB，远低于上限。
 - 重新生成：`python tools/build-skill-zip.py`
@@ -31,11 +31,11 @@
 | 市场展示分类 | `效率工具`、`办公协同`（可选加 `知识与学习`；至少 1 个，最多 5 个） |
 | 服务类目 | `工具-办公` |
 | 头像 | 上传 `assets/icon-512.png`（512×512 PNG，15KB；要求 512×512、JPG/PNG、≤500KB） |
-| 版本号 | `1.0.1` |
+| 版本号 | `1.1.0` |
 
 **介绍文案**（对应平台「介绍」字段，可直接粘贴）：
 
-> 把另一个会话的上下文搬进当前会话，并支持从任意一条消息处分叉——只带这条消息之前的历史，之后的不带，对标 Codex 桌面版的「Fork」。WorkBuddy 桌面版没有原生分支按钮，本技能用「锚点切片 + 交接稿」实现等价效果，且不改动原会话。附带关键词反查：只记得内容、忘了是哪个会话时，也能定位到具体时间点。只读本机会话记录，不联网、不上传。
+> 把另一个会话的上下文搬进当前会话，并支持从任意一条消息处分叉——只带这条消息之前的历史，之后的不带，对标 Codex 桌面版的「Fork」。WorkBuddy 桌面版没有原生分支按钮，本技能用「锚点切片 + 交接稿」实现等价效果，且不改动原会话。它还带一块**分叉选择器面板**：锚点清单渲染成可点的列表，选一条消息按一下，分叉就开始了，不用记编号。附带关键词反查：只记得内容、忘了是哪个会话时，也能定位到具体时间点。只读本机会话记录，不联网、不上传。
 
 **SKILL.md 里已写好的元信息**（平台从包里解析，页面不可改，要改就改文件重打包）：
 
@@ -47,7 +47,7 @@ description: 在会话之间搬运上下文。当用户贴会话 ID 问……时
 description_zh: 把另一个会话的上下文搬进当前会话，支持按消息锚点「分叉」……
 description_en: Bring another WorkBuddy thread context into the current conversation...
 category: productivity
-version: 1.0.1
+version: 1.1.0
 author: Strange
 allowed-tools: Bash,Read
 ```
@@ -57,7 +57,7 @@ allowed-tools: Bash,Read
 1. 打开 <https://open.workbuddy.cn> → 「立即入驻」→ 微信或手机号登录。
 2. 完成个人认证（见第一节第 1 点）。
 3. 左侧 `发布管理 → 技能` → 右上角「创建」。
-4. 上传 `dist/workbuddy-thread-context-1.0.0.zip`。平台自动解包解析并生成技能 ID。
+4. 上传 `dist/workbuddy-thread-context-1.1.0.zip`。平台自动解包解析并生成技能 ID。
    - 解析失败：先换 `-flat` 包；仍失败就对照官方文档查目录层级，或发邮件 `openworkbuddy@tencent.com` / 扫开放平台首页二维码进开发者社群。
 5. 「确认信息」页补齐第三节的展示信息，右侧预览核对名称、简介、头像。
 6. 「提交审核」→ 核对汇总 → 提交。

@@ -45,10 +45,30 @@
 {"type":"message","role":"assistant","timestamp":1789629473000,"content":[{"type":"text","text":"…"}]}
 ```
 
+## `role: "user"` 的记录不止一种（关键）
+
+`type=message` 且 `role=user` 的记录里，**只有一部分是人真的说的话**。实测至少四种形态：
+
+| 形态 | 开头长什么样 | 处理 |
+|---|---|---|
+| 人说的话 | `<system-reminder data-role="user-context">…` 包裹，**末尾**追加 `<user_query>真话</user_query>` | 抽 `<user_query>` 的**最后一组**，即真话 |
+| 对话摘要 | `<cb_summary>` / `<conversation_history_summary>` | **整条丢弃**（见下） |
+| 其余注入块 | `<system-reminder …>` / `<additional_data>` / `<identity_context>` / `<user_info>`，且无 `<user_query>` | 丢弃 |
+| 系统通知 | `<task-notification>` / `<user-prompt-submit-hook>`（经 `<user_query>` 投递） | 保留但**标成 `notice`**，别当成「人说的」 |
+
+三条踩过的坑：
+
+1. **摘要记录必须先丢**。`<cb_summary>` 的正文里引用了 `<user_query>` 字样，若直接跑正则，匹配会**横跨整个摘要**，产出一段没有意义的「锚点」（实测一次 3 条）。
+2. **取最后一组而不是第一组** `<user_query>`。注入块里可能出现同名的空标签对，取第一组会让这条真实消息被整条丢掉（实测丢过 7 条）。
+3. **抽 `<user_query>` 要排在「判注入块前缀」前面** —— 注入块与真话可能落在同一条记录里，先判前缀会连真话一起丢。
+
+划词引用会在真话里塞包装：`@selection:"…"` 与 `<selection_quote …>…</selection_quote>`。**只剥包装和属性，引文正文要留**。
+
 ## 解析时的坑
 
 - **坏行要跳过**：会话进行中追加写，最后一行可能被读成半截 JSON。逐行 `try/catch`。
 - **不要用 `content` 找工具参数**：参数不在 `content` 里，只在 `arguments`。
 - **不要用 `timestamp` 直接当秒**：它是毫秒；跨端对时间戳做比较前先确认单位。
-- **注入块要剥**：`user` 记录里可能夹着 harness 注入的说明块。**先抽 `<user_query>…</user_query>`**，抽不到再按开头标记（`<system-reminder>` / `<cb_summary>` / `<additional_data>` / `<identity_context>`）整条丢弃 —— 顺序反了会把「注入块与真话同行」的那些消息一起丢掉。
+- **时间戳是 UTC 毫秒，展示要转本地时区**。直接用 `toISOString()` 渲染会给出 UTC 时刻 —— 在国内会与实际墙上钟差 8 小时，按「MM-DD HH:MM」回查锚点就会选错点。
+- **同目录还有兄弟文件**：`<会话id>.file-rollback.ndjson` 等。注意 **`.ndjson` 并不以 `.jsonl` 结尾**，按后缀过滤时它会被排除；但若按「文件名包含 id」来匹配，就会挑错文件（实测踩过一次：只读到 6 条记录）。匹配规则一律用 `includes(id) && endsWith('.jsonl')`。
 - **文件是追加的**：同一会话几分钟内条数会变。要做一致性判断就先记下 mtime 与行数。
