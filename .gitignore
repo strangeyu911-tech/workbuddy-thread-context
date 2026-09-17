@@ -1,0 +1,15 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Node
+node_modules/
+
+# 本地导出物（交接稿等，含真实对话正文，绝不提交）
+*.local.md
+branches/
